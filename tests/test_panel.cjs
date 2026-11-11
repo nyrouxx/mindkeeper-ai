@@ -102,3 +102,58 @@ test('moving completed task from editor reopens it atomically with new date',asy
   try{await panel.saveTask();assert.equal(request.action,'reopen');assert.equal(request.due_at,'2026-11-14T18:00');assert.equal(request.task_id,panel.editing.id);assert.equal(request.revision,3);}
   finally{dialog.querySelector=previous;}
 });
+
+const aiData=()=>({provider:'codex',providers:[
+  {value:'codex',label:'Codex · ChatGPT',hint:'Существующий вход'},
+  {value:'gemini',label:'Gemini',hint:'Бесплатная квота API',key_required:true},
+  {value:'ollama',label:'Ollama',hint:'Локальная модель',custom_url:true},
+  {value:'yandex',label:'Яндекс',hint:'AI Studio',key_required:true,folder_required:true}
+],configurations:{
+  codex:{model:'default',base_url:'',folder_id:'',key_configured:false},
+  gemini:{model:'gemini-2.5-flash-lite',base_url:'https://google.example/v1',folder_id:'',key_configured:true,api_key:'PRIVATE_KEY_MUST_NOT_RENDER'},
+  ollama:{model:'qwen3:8b',base_url:'http://local-server:11434/v1',folder_id:'',key_configured:false},
+  yandex:{model:'yandexgpt/rc',base_url:'https://yandex.example/v1',folder_id:'folder-123',key_configured:false}
+}});
+
+test('AI settings list providers and keep saved credentials out of HTML',()=>{
+  const panel=new Panel();panel.data=data();panel.data.ai=aiData();
+  panel.settings();assert(dialog.innerHTML.includes('Настроить AI'));
+  panel.aiSettings('gemini');
+  assert(dialog.innerHTML.includes('type="password"'));
+  assert(dialog.innerHTML.includes('Ключ сохранён'));
+  assert(dialog.innerHTML.includes('Проверить подключение'));
+  assert(!dialog.innerHTML.includes('PRIVATE_KEY'));
+  assert(!dialog.innerHTML.includes('id="ai-base-url"'));
+  panel.aiSettings('codex');assert(!dialog.innerHTML.includes('id="ai-key"'));
+  panel.aiSettings('ollama');assert(dialog.innerHTML.includes('http://local-server:11434/v1'));assert(!dialog.innerHTML.includes('gemini-2.5'));
+  panel.aiSettings('yandex');assert(dialog.innerHTML.includes('id="ai-folder"'));assert(dialog.innerHTML.includes('folder-123'));
+});
+
+test('AI provider labels, models and endpoint values are escaped',()=>{
+  const panel=new Panel();panel.data=data();panel.data.ai=aiData();
+  panel.data.ai.configurations.ollama.model='"><img src=x onerror=alert(1)>';
+  panel.aiSettings('ollama');assert(dialog.innerHTML.includes('&lt;img'));assert(!dialog.innerHTML.includes('<img'));
+});
+
+test('AI test submits only selected connection fields and leaves active provider unchanged',async()=>{
+  const panel=new Panel();panel.data=data();panel.data.ai=aiData();
+  const fields={'#ai-provider':{value:'gemini'},'#ai-model':{value:'gemini-2.5-flash-lite'},'#ai-key':{value:'PRIVATE_TYPED_KEY'},'.ai-result':{textContent:''}};
+  const before=dialog.querySelector;dialog.querySelector=selector=>fields[selector] || null;
+  let called;
+  panel.call=async(type,payload)=>{called={type,payload};return {message:'Подключение работает'};};
+  try{
+    await panel.testAI();assert.equal(called.type,'ai_test');assert.equal(called.payload.api_key,'PRIVATE_TYPED_KEY');
+    assert(!Object.hasOwn(called.payload,'tasks'));assert.equal(panel.data.ai.provider,'codex');assert.equal(fields['.ai-result'].textContent,'Подключение работает');
+  }finally{dialog.querySelector=before;}
+});
+
+test('AI save clears the typed key from the rebuilt form and accepts only the public snapshot',async()=>{
+  const panel=new Panel();panel.data=data();panel.data.ai=aiData();
+  const fields={'#ai-provider':{value:'gemini'},'#ai-model':{value:'gemini-2.5-flash-lite'},'#ai-key':{value:'PRIVATE_TYPED_KEY'},'.ai-result':{textContent:''}};
+  const before=dialog.querySelector;dialog.querySelector=selector=>fields[selector] || null;
+  panel.call=async()=>{const result=aiData();result.provider='gemini';delete result.configurations.gemini.api_key;return result;};
+  try{
+    await panel.saveAI();assert.equal(panel.data.ai.provider,'gemini');
+    assert(!dialog.innerHTML.includes('PRIVATE_TYPED_KEY'));assert(!JSON.stringify(panel.data.ai).includes('PRIVATE_TYPED_KEY'));
+  }finally{dialog.querySelector=before;}
+});

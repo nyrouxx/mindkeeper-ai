@@ -41,6 +41,7 @@ class PersonalSecretaryPanel extends HTMLElement {
     this.shadowRoot.addEventListener('click', event => this.click(event));
     this.shadowRoot.addEventListener('input', event => {if(event.target.id === 'compose') this.draft = event.target.value;});
     this.shadowRoot.addEventListener('change', event => {
+      if(event.target.id === 'ai-provider')return this.aiSettings(event.target.value);
       if(event.target.id === 'priority-filter'){this.priority=event.target.value;this.render();}
       if(event.target.id === 'show-done'){this.showDone=event.target.checked;this.render();}
       if(event.target.id === 'task-all-day'){const time=this.shadowRoot.querySelector('dialog').querySelector('#task-time');if(time)time.disabled=event.target.checked;}
@@ -118,6 +119,9 @@ class PersonalSecretaryPanel extends HTMLElement {
       if(action==='send')return this.send();
       if(action==='edit'||action==='new')return this.edit(action==='new'?null:this.data.tasks.find(t=>t.id===button.dataset.id));
       if(action==='settings')return this.settings();
+      if(action==='ai')return this.aiSettings();
+      if(action==='save-ai')return this.saveAI();
+      if(action==='test-ai')return this.testAI();
       if(action==='sync-google')return this.syncGoogle();
       if(action==='telegram')return this.telegramSettings();
       if(action==='save-telegram')return this.saveTelegram();
@@ -150,7 +154,45 @@ class PersonalSecretaryPanel extends HTMLElement {
     try{await this.call('change',{operation:op});dialog.close();}catch(error){dialog.querySelector('.modalerror').textContent=error.message;}
   }
   settings(){
-    this.open(`<h2>mindKeeper AI · настройки</h2><p class="subtle">Секретарь сам подбирает метки по смыслу дела. По одному названию в строке.</p><label for="categories">Категории</label><textarea id="categories" rows="6">${esc(this.data.categories.join('\n'))}</textarea><label for="priorities">Уровни важности</label><textarea id="priorities" rows="3">${esc(this.data.priorities.join('\n'))}</textarea><p class="subtle">Первый уровень — обычные дела. Остальные — повышенная важность.</p><label for="repeat-interval">Повтор напоминаний, минут</label><input id="repeat-interval" type="number" min="1" max="180" step="1" value="${this.data.repeat_interval_minutes || 10}"><p class="subtle">Обычное напоминание — за час до начала. Этот интервал отсчитывается после первого уведомления и действует только с меткой «Напоминать до ответа».</p><label for="day-mode">Первое напоминание о деле без времени</label><select id="day-mode"><option value="after_hour" ${this.data.all_day_reminder_mode!=='day_time'?'selected':''}>Через час после добавления сегодня</option><option value="day_time" ${this.data.all_day_reminder_mode==='day_time'?'selected':''}>В заданное время выбранного дня</option></select><label for="day-clock">Время напоминания о деле на день</label><input id="day-clock" type="time" value="${esc(this.data.all_day_reminder_time || '09:00')}"><p class="subtle">Для будущих дней используется это время в часовом поясе ${esc(this.data.timezone)}. Если выбранное время сегодня уже прошло — напомню сразу.</p><label class="checklabel"><input id="agenda-enabled" type="checkbox" ${this.data.agenda_enabled!==false?'checked':''}>Сообщение «Дела на сегодня» в Telegram</label><p class="subtle">Одно сообщение с делами и временем. Закрепи его в чате — секретарь будет обновлять этот же список.</p><button class="pill" data-action="refresh-agenda">${this.data.agenda_status==='uncertain'?'Создать сообщение снова':'Обновить сообщение'}</button>${this.googleSettings()}<div class="row" style="margin-top:20px"><div class="grow"><strong>Telegram</strong><p class="subtle">${esc(this.data.telegram?.bot_label || '')}<br>${esc(this.data.telegram?.chat_label || '')}</p></div><button class="pill" data-action="telegram">Настроить</button></div><div class="modalerror"></div><div class="actions"><button class="pill" data-action="close">Закрыть</button><button class="send" data-action="save-settings">Сохранить</button></div>`);
+    this.open(`<h2>mindKeeper AI · настройки</h2><p class="subtle">Секретарь сам подбирает метки по смыслу дела. По одному названию в строке.</p><label for="categories">Категории</label><textarea id="categories" rows="6">${esc(this.data.categories.join('\n'))}</textarea><label for="priorities">Уровни важности</label><textarea id="priorities" rows="3">${esc(this.data.priorities.join('\n'))}</textarea><p class="subtle">Первый уровень — обычные дела. Остальные — повышенная важность.</p><label for="repeat-interval">Повтор напоминаний, минут</label><input id="repeat-interval" type="number" min="1" max="180" step="1" value="${this.data.repeat_interval_minutes || 10}"><p class="subtle">Обычное напоминание — за час до начала. Этот интервал отсчитывается после первого уведомления и действует только с меткой «Напоминать до ответа».</p><label for="day-mode">Первое напоминание о деле без времени</label><select id="day-mode"><option value="after_hour" ${this.data.all_day_reminder_mode!=='day_time'?'selected':''}>Через час после добавления сегодня</option><option value="day_time" ${this.data.all_day_reminder_mode==='day_time'?'selected':''}>В заданное время выбранного дня</option></select><label for="day-clock">Время напоминания о деле на день</label><input id="day-clock" type="time" value="${esc(this.data.all_day_reminder_time || '09:00')}"><p class="subtle">Для будущих дней используется это время в часовом поясе ${esc(this.data.timezone)}. Если выбранное время сегодня уже прошло — напомню сразу.</p><label class="checklabel"><input id="agenda-enabled" type="checkbox" ${this.data.agenda_enabled!==false?'checked':''}>Сообщение «Дела на сегодня» в Telegram</label><p class="subtle">Одно сообщение с делами и временем. Закрепи его в чате — секретарь будет обновлять этот же список.</p><button class="pill" data-action="refresh-agenda">${this.data.agenda_status==='uncertain'?'Создать сообщение снова':'Обновить сообщение'}</button>${this.aiSummary()}${this.googleSettings()}<div class="row" style="margin-top:20px"><div class="grow"><strong>Telegram</strong><p class="subtle">${esc(this.data.telegram?.bot_label || '')}<br>${esc(this.data.telegram?.chat_label || '')}</p></div><button class="pill" data-action="telegram">Настроить</button></div><div class="modalerror"></div><div class="actions"><button class="pill" data-action="close">Закрыть</button><button class="send" data-action="save-settings">Сохранить</button></div>`);
+  }
+  aiSummary(){
+    const ai=this.data.ai, active=ai?.providers.find(p=>p.value===ai.provider);
+    return `<div class="row" style="margin-top:20px"><div class="grow"><strong>AI · ${esc(active?.label || 'Codex')}</strong><p class="subtle">Выбор сервиса, модели и подключения</p></div><button class="pill" data-action="ai">Настроить AI</button></div>`;
+  }
+  aiSettings(provider){
+    const ai=this.data.ai;
+    if(!ai){this.failure='Обнови страницу, чтобы загрузить настройки AI';this.render();return;}
+    provider=provider || ai.provider;
+    const spec=ai.providers.find(p=>p.value===provider);
+    if(!spec)return;
+    const config=ai.configurations[provider];
+    this.open(`<h2>AI для mindKeeper</h2><label for="ai-provider">Кто будет разбирать планы</label><select id="ai-provider">${ai.providers.map(p=>`<option value="${esc(p.value)}" ${p.value===provider?'selected':''}>${esc(p.label)}</option>`).join('')}</select><p class="subtle">${esc(spec.hint)}</p><label for="ai-model">Модель${provider==='codex'?' · default — выбор Codex':''}</label><input id="ai-model" value="${esc(config.model)}" maxlength="300" autocomplete="off">${provider!=='codex'?`<label for="ai-key">API-ключ${spec.key_required?'':' · необязательно'}</label><input id="ai-key" type="password" name="mindkeeper-${esc(provider)}-key" autocomplete="new-password" placeholder="${config.key_configured?'Ключ сохранён · оставь пустым, чтобы сохранить':'Вставь ключ из кабинета провайдера'}"><p class="subtle">Сохранённый ключ не показывается. Ключи разных сервисов хранятся отдельно.</p>${config.key_configured?'<label class="checklabel"><input id="ai-clear-key" type="checkbox">Удалить сохранённый ключ</label>':''}`:'<p class="subtle">Вход в ChatGPT: <a href="/config/integrations/integration/personal_secretary">Устройства и службы → mindKeeper AI → Настроить → Войти в ChatGPT</a>. Для этого способа Codex должен быть установлен на сервере HA.</p>'}${spec.custom_url?`<label for="ai-base-url">Базовый адрес API</label><input id="ai-base-url" value="${esc(config.base_url)}" placeholder="http://адрес-сервера:11434/v1" autocomplete="off">`:''}${spec.folder_required?`<label for="ai-folder">ID каталога Яндекса</label><input id="ai-folder" value="${esc(config.folder_id)}" autocomplete="off">`:''}<p class="subtle">Выбранный сервис получает сообщения и контекст дел. Автоматического переключения на другой AI нет. Проверка отправляет только тестовую фразу, без твоих дел.</p>${spec.url?`<p><a href="${esc(spec.url)}" target="_blank" rel="noopener">Документация и условия сервиса</a></p>`:''}<div class="ai-result subtle" role="status"></div><div class="actions"><button class="pill" data-action="close">Закрыть</button><button class="pill" data-action="test-ai">Проверить подключение</button><button class="send" data-action="save-ai">Сохранить AI</button></div>`);
+  }
+  aiSelection(){
+    const dialog=this.shadowRoot.querySelector('dialog');
+    const get=id=>dialog.querySelector('#'+id);
+    const value={provider:get('ai-provider').value,model:get('ai-model').value};
+    for(const [field,id] of [['api_key','ai-key'],['base_url','ai-base-url'],['folder_id','ai-folder']])if(get(id))value[field]=get(id).value;
+    if(get('ai-clear-key'))value.clear_key=get('ai-clear-key').checked;
+    return value;
+  }
+  async saveAI(){
+    if(this.aiActionPending)return;
+    this.aiActionPending=true;
+    const dialog=this.shadowRoot.querySelector('dialog');
+    try{this.data.ai=await this.call('ai',this.aiSelection());this.aiSettings(this.data.ai.provider);this.shadowRoot.querySelector('dialog').querySelector('.ai-result').textContent='AI выбран. Дела и настройки напоминаний сохранены.';}
+    catch(error){dialog.querySelector('.ai-result').textContent=error.message;}
+    finally{this.aiActionPending=false;}
+  }
+  async testAI(){
+    if(this.aiActionPending)return;
+    this.aiActionPending=true;
+    const target=this.shadowRoot.querySelector('dialog').querySelector('.ai-result');
+    target.textContent='Проверяю подключение…';
+    try{const result=await this.call('ai_test',this.aiSelection());target.textContent=result.message;}
+    catch(error){target.textContent=error.message;}
+    finally{this.aiActionPending=false;}
   }
   googleSettings(){
     const google=this.data.google || {calendars:[]};

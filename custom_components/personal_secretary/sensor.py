@@ -2,6 +2,7 @@
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 
+from .ai import ERRORS
 from .const import DOMAIN
 from .model import active_tasks, reminder_expired, timestamp
 
@@ -58,10 +59,8 @@ class SecretarySensor(SensorEntity):
         errors = {
             "internal_error": "Ошибка обработки; сообщения сохранены",
             "invalid_plan": "Нужно уточнить задачу",
-            "codex_unavailable": "Codex недоступен; проверьте вход и лимиты",
-            "timeout": "Codex не ответил вовремя",
-            "invalid_response": "Не удалось разобрать ответ Codex",
             "telegram_unavailable": "Не удалось отправить уведомление",
+            **ERRORS,
         }
         return errors.get(self.secretary.last_error, self.secretary.last_error) or (
             "Обрабатываю сообщение" if self.secretary.parser.process else "Готов"

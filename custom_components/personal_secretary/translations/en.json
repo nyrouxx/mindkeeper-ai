@@ -47,8 +47,9 @@
         "menu_options": {
           "telegram": "Telegram: бот и получатель",
           "settings": "Дела и напоминания",
-          "login": "Войти заново в ChatGPT",
-          "google": "Google Calendar: календарь и синхронизация"
+          "login": "Sign in to ChatGPT for Codex",
+          "google": "Google Calendar: календарь и синхронизация",
+          "ai": "AI: provider, model and connection"
         }
       },
       "login_start": {
@@ -89,6 +90,24 @@
           "google_calendar": "Календарь для дел",
           "google_sync_mode": "Направление обмена"
         }
+      },
+      "ai": {
+        "title": "AI provider",
+        "description": "Select Codex, a cloud API or a local model. Tasks, reminders and calendar links are preserved.",
+        "data": {
+          "provider": "AI provider"
+        }
+      },
+      "ai_settings": {
+        "title": "AI · {provider}",
+        "description": "{hint}\n\n{key_status}. Leave the key empty to keep it. Stored keys are never shown. The selected service receives messages and task context. A connection test is available in the mindKeeper sidebar panel.",
+        "data": {
+          "model": "Model",
+          "api_key": "API key",
+          "clear_key": "Remove saved key",
+          "base_url": "API base URL",
+          "folder_id": "Yandex folder ID"
+        }
       }
     },
     "error": {
@@ -96,7 +115,14 @@
       "invalid_user": "Укажите положительный Telegram ID пользователя.",
       "invalid_interval": "Укажите целое число от 1 до 180 минут.",
       "invalid_calendar": "Выберите доступный календарь из штатной интеграции Google Calendar.",
-      "invalid_day_time": "Укажите время в формате ЧЧ:ММ."
+      "invalid_day_time": "Укажите время в формате ЧЧ:ММ.",
+      "ai_provider": "Choose an AI provider.",
+      "ai_model": "Enter a model name.",
+      "ai_endpoint": "Check the API URL: no credentials or query parameters; cloud APIs require HTTPS.",
+      "ai_key": "Add an API key for this provider.",
+      "ai_folder": "Enter the Yandex folder ID.",
+      "ai_storage": "Could not save AI settings. Please try again.",
+      "ai_request": "Check the AI connection settings."
     },
     "progress": {
       "starting_login": "Получаю код входа…",

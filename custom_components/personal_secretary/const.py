@@ -2,10 +2,11 @@
 
 DOMAIN = "personal_secretary"
 NAME = "mindKeeper AI"
-VERSION = "0.6.2"
+VERSION = "0.7.0"
 DEFAULTS = {
     "enabled": True,
     "model": "default",
+    "ai_provider": "codex",
     "agenda_enabled": True,
     "repeat_interval_minutes": 10,
     "all_day_reminder_mode": "after_hour",

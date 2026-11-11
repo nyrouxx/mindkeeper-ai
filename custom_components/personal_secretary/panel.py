@@ -9,6 +9,8 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.core import callback
 from homeassistant.util import dt as dt_util
 
+from .ai import AIError, error_message
+from .codex import CodexError
 from .const import DOMAIN, NAME, VERSION
 from .google_sync import validate_selection
 from .model import InvalidPlan, validate_day_settings, validate_labels, validate_repeat_interval
@@ -59,6 +61,7 @@ def snapshot(sec):
         "all_day_reminder_time": sec.options["all_day_reminder_time"],
         "google": sec.google_sync.public(),
         "telegram": public_settings(sec.hass, sec.telegram_route),
+        "ai": sec.ai.public(),
         "timezone": sec.hass.config.time_zone,
         "pending": sum(m["status"] == "pending" for m in sec.state["messages"]),
         "error": bool(sec.last_error),
@@ -94,6 +97,8 @@ async def setup_panel(hass):
             ws_telegram,
             ws_agenda,
             ws_google,
+            ws_ai,
+            ws_ai_test,
         ):
             websocket_api.async_register_command(hass, command)
         hass.data[DOMAIN + "_panel"] = True
@@ -252,6 +257,44 @@ async def ws_telegram(hass, connection, msg):
         connection.send_error(msg["id"], "invalid_input", str(error))
     else:
         connection.send_result(msg["id"])
+
+
+AI_SELECTION = {
+    vol.Required("provider"): str,
+    vol.Optional("model"): str,
+    vol.Optional("api_key"): str,
+    vol.Optional("clear_key"): bool,
+    vol.Optional("base_url"): str,
+    vol.Optional("folder_id"): str,
+}
+
+
+@websocket_api.websocket_command({"type": DOMAIN + "/ai", **AI_SELECTION})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_ai(hass, connection, msg):
+    try:
+        await secretary(hass).configure_ai(msg)
+    except AIError as error:
+        connection.send_error(msg["id"], str(error), error_message(error))
+    except InvalidPlan as error:
+        connection.send_error(msg["id"], "not_ready", str(error))
+    else:
+        connection.send_result(msg["id"], secretary(hass).ai.public())
+
+
+@websocket_api.websocket_command({"type": DOMAIN + "/ai_test", **AI_SELECTION})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_ai_test(hass, connection, msg):
+    try:
+        result = await secretary(hass).parser.test(msg)
+    except CodexError as error:
+        connection.send_error(msg["id"], str(error), error_message(error))
+    except InvalidPlan as error:
+        connection.send_error(msg["id"], "not_ready", str(error))
+    else:
+        connection.send_result(msg["id"], result)
 
 
 @websocket_api.websocket_command(

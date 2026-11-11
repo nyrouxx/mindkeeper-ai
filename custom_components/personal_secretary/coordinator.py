@@ -12,7 +12,8 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .agenda import DailyAgenda
-from .codex import CodexError, CodexParser
+from .ai import AIParser, AISettings
+from .codex import CodexError
 from .const import DEFAULTS, DOMAIN
 from .google_sync import GoogleSync
 from .model import (
@@ -63,7 +64,8 @@ class Secretary:
         self.stopping = False
         self.last_error = None
         self.authenticating = False
-        self.parser = CodexParser(hass.config.path(".personal_secretary"))
+        self.ai = AISettings(hass, entry)
+        self.parser = AIParser(hass, self.ai)
         self.agenda = DailyAgenda(self)
         self.google_sync = GoogleSync(self)
 
@@ -87,6 +89,12 @@ class Secretary:
     def now(self):
         return dt_util.now()
 
+    async def configure_ai(self, selection):
+        await self.ai.configure(selection)
+        self.last_error = None
+        await self.retry_failed()
+        self.kick()
+
     async def save(self):
         completed = [m for m in self.state["messages"] if m["status"] == "processed"][-200:]
         retained = {m["key"] for m in completed}
@@ -104,6 +112,7 @@ class Secretary:
             listener()
 
     async def start(self):
+        await self.ai.load()
         loaded = await self.store.async_load()
         self.state = migrate_state(loaded, self.now(), self.options) if loaded else empty_state()
         if self.options["enabled"]:
@@ -414,6 +423,7 @@ class Secretary:
     async def process(self, message):
         key = message["key"]
         origin = message.get("origin", "telegram")
+        ai_generation = self.ai.generation
         try:
             if message["text"] == "__attachment__":
                 async with self.lock:
@@ -431,7 +441,6 @@ class Secretary:
                     await self.save()
                 return
             expected = {k: t["revision"] for k, t in self.state["tasks"].items()}
-            self.parser.model = self.options["model"]
             context = self.context(message)
             plan = await self.parser.parse(context)
             if origin == "classification":
@@ -468,6 +477,13 @@ class Secretary:
                 if seen != allowed:
                     raise InvalidPlan("Не все дела получили метки")
             async with self.lock:
+                if ai_generation != self.ai.generation:
+                    # Discard an old provider's in-flight plan and process the
+                    # same durable inbox message with the newly selected AI.
+                    current = next(m for m in self.state["messages"] if m["key"] == key)
+                    current.update(status="pending", attempts=0)
+                    await self.save()
+                    return
                 if expected != {k: t["revision"] for k, t in self.state["tasks"].items()}:
                     raise InvalidPlan("Список дел изменился во время ответа")
                 self.state, changes = apply_operations(
@@ -488,6 +504,10 @@ class Secretary:
         except (CodexError, InvalidPlan) as error:
             async with self.lock:
                 current = next(m for m in self.state["messages"] if m["key"] == key)
+                if ai_generation != self.ai.generation:
+                    current.update(status="pending", attempts=0)
+                    await self.save()
+                    return
                 current["status"] = "error"
                 current["attempts"] += 1
                 current["retry_at"] = (

@@ -7,6 +7,7 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers import selector
 
+from .ai import PROVIDERS, AIError
 from .auth import DeviceLogin
 from .const import DEFAULTS, DOMAIN, NAME
 from .google_sync import calendar_choices, validate_selection
@@ -33,12 +34,6 @@ class SecretaryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         chats = chat_choices(self.hass)
         if not chats:
             return self.async_abort(reason="no_telegram_chat")
-        root = Path(self.hass.config.path(".personal_secretary"))
-        installed = await self.hass.async_add_executor_job(
-            lambda: (root / "bin/codex").is_file() and (root / "codex-home/auth.json").is_file()
-        )
-        if not installed:
-            return self.async_abort(reason="codex_not_installed")
         if user_input is not None and user_input.get("chat") in chats:
             selected = {k: v for k, v in chats[user_input["chat"]].items() if k != "label"}
             self.telegram_route = selected
@@ -101,7 +96,71 @@ class SecretaryOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input=None):
         return self.async_show_menu(
-            step_id="init", menu_options=["telegram", "settings", "google", "login"]
+            step_id="init", menu_options=["ai", "telegram", "settings", "google", "login"]
+        )
+
+    async def async_step_ai(self, user_input=None):
+        errors = {}
+        if user_input is not None:
+            if user_input.get("provider") in PROVIDERS:
+                self.ai_provider = user_input["provider"]
+                return await self.async_step_ai_settings()
+            errors["base"] = "ai_provider"
+        return self.async_show_form(
+            step_id="ai",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        "provider", default=self.config_entry.runtime_data.ai.provider
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                {"value": key, "label": spec["label"]}
+                                for key, spec in PROVIDERS.items()
+                            ],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_ai_settings(self, user_input=None):
+        sec = self.config_entry.runtime_data
+        provider = self.ai_provider
+        spec, values = PROVIDERS[provider], sec.ai.configuration(provider)
+        errors = {}
+        if user_input is not None:
+            try:
+                await sec.configure_ai({"provider": provider, **user_input})
+            except AIError as error:
+                errors["base"] = str(error)
+                values.update(
+                    {k: v for k, v in user_input.items() if k in ("model", "base_url", "folder_id")}
+                )
+            else:
+                return self.async_create_entry(title="", data=dict(self.config_entry.options))
+        fields = {vol.Required("model", default=values["model"]): selector.TextSelector()}
+        if provider != "codex":
+            # Never put a stored credential in a form default or result data.
+            fields[vol.Optional("api_key")] = selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+            )
+            fields[vol.Optional("clear_key", default=False)] = bool
+        if spec.get("custom_url"):
+            fields[vol.Required("base_url", default=values["base_url"])] = selector.TextSelector()
+        if spec.get("folder_required"):
+            fields[vol.Required("folder_id", default=values["folder_id"])] = selector.TextSelector()
+        return self.async_show_form(
+            step_id="ai_settings",
+            data_schema=vol.Schema(fields),
+            errors=errors,
+            description_placeholders={
+                "provider": spec["label"],
+                "hint": spec["hint"],
+                "key_status": "Ключ сохранён" if values["api_key"] else "Ключ не задан",
+            },
         )
 
     async def async_step_google(self, user_input=None):
@@ -294,7 +353,7 @@ class SecretaryOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_login(self, user_input=None):
         secretary = self.config_entry.runtime_data
-        secretary.authenticating = True
+        secretary.authenticating = secretary.ai.provider == "codex"
         self.login = DeviceLogin(Path(self.hass.config.path(".personal_secretary")))
         self.task = self.hass.async_create_task(self.login.start())
         return await self.async_step_login_start()
