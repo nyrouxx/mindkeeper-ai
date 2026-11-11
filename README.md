@@ -5,8 +5,8 @@
 Планы и напоминания в Home Assistant, Telegram и Google Calendar — с пониманием
 обычного текста через ChatGPT / Codex.
 
-[![Checks](https://github.com/NyrouxHide/mindkeeper-ai/actions/workflows/ci.yaml/badge.svg)](https://github.com/NyrouxHide/mindkeeper-ai/actions/workflows/ci.yaml)
-[![Release](https://img.shields.io/github/v/release/NyrouxHide/mindkeeper-ai)](https://github.com/NyrouxHide/mindkeeper-ai/releases)
+[![Checks](https://github.com/nyrouxx/mindkeeper-ai/actions/workflows/ci.yaml/badge.svg)](https://github.com/nyrouxx/mindkeeper-ai/actions/workflows/ci.yaml)
+[![Release](https://img.shields.io/github/v/release/nyrouxx/mindkeeper-ai)](https://github.com/nyrouxx/mindkeeper-ai/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Разговаривайте с существующим Telegram-ботом как с человеком:
@@ -23,16 +23,16 @@
 категорию и важность. Отвечает обычным языком. Если непонятно, какое дело или какой
 день имеется в виду, задаёт уточняющий вопрос.
 
-**Версия 0.6.1.** Текст обрабатывает Codex по существующей подписке ChatGPT. Отдельный
+**Версия 0.6.2.** Текст обрабатывает Codex по существующей подписке ChatGPT. Отдельный
 API-ключ и другие поставщики моделей не нужны. Голос и контроль счетов ЖКХ пока не подключены.
 
 <!-- ha-marketplace:exclude-start -->
 ## Установка через Marketplace / HACS
 
-[![Открыть Marketplace](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=NyrouxHide&repository=mindkeeper-ai&category=integration)
+[![Открыть Marketplace](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=nyrouxx&repository=mindkeeper-ai&category=integration)
 
 1. В Home Assistant откройте **Настройки → Marketplace → Добавить по ссылке**.
-2. Укажите `https://github.com/NyrouxHide/mindkeeper-ai` и тип **Интеграция**, если он запрошен.
+2. Укажите `https://github.com/nyrouxx/mindkeeper-ai` и тип **Интеграция**, если он запрошен.
 3. Откройте mindKeeper AI и установите релиз. При необходимости подключите GitHub в Marketplace.
 4. После подготовки Codex runtime перезапустите Core и добавьте **mindKeeper AI**
    в **Настройки → Устройства и службы → Добавить интеграцию**. Выберите Telegram-бота и чат.

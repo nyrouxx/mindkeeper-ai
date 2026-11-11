@@ -30,9 +30,9 @@ def check_release():
     assert manifest["domain"] == "personal_secretary"
     assert manifest["name"] == hacs["name"] == "mindKeeper AI"
     assert manifest["config_flow"] is True
-    assert manifest["documentation"] == "https://github.com/NyrouxHide/mindkeeper-ai"
+    assert manifest["documentation"] == "https://github.com/nyrouxx/mindkeeper-ai"
     assert manifest["issue_tracker"] == manifest["documentation"] + "/issues"
-    assert manifest["codeowners"] == ["@NyrouxHide"]
+    assert manifest["codeowners"] == ["@nyrouxx"]
     assert hacs["homeassistant"] == "2026.11.1"
     assert re.fullmatch(r"\d+\.\d+\.\d+", manifest["version"])
     constants = ast.parse((COMPONENT / "const.py").read_text())

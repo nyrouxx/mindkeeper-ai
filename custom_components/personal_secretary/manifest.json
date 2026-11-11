@@ -1,16 +1,16 @@
 {
   "domain": "personal_secretary",
   "name": "mindKeeper AI",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "config_flow": true,
-  "documentation": "https://github.com/NyrouxHide/mindkeeper-ai",
-  "issue_tracker": "https://github.com/NyrouxHide/mindkeeper-ai/issues",
+  "documentation": "https://github.com/nyrouxx/mindkeeper-ai",
+  "issue_tracker": "https://github.com/nyrouxx/mindkeeper-ai/issues",
   "dependencies": [
     "panel_custom",
     "telegram_bot"
   ],
   "codeowners": [
-    "@NyrouxHide"
+    "@nyrouxx"
   ],
   "integration_type": "service",
   "iot_class": "cloud_push",
