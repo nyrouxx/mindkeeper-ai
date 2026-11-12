@@ -49,7 +49,7 @@
           "settings": "Дела и напоминания",
           "login": "Sign in to ChatGPT for Codex",
           "google": "Google Calendar: календарь и синхронизация",
-          "ai": "AI: provider, model and connection"
+          "ai": "AI: Codex or manual API"
         }
       },
       "login_start": {
@@ -93,20 +93,23 @@
       },
       "ai": {
         "title": "AI provider",
-        "description": "Select Codex, a cloud API or a local model. Tasks, reminders and calendar links are preserved.",
+        "description": "Choose Codex or configure an API manually. Tasks, reminders and calendar links are preserved.",
         "data": {
-          "provider": "AI provider"
+          "provider": "Connection"
         }
       },
       "ai_settings": {
         "title": "AI · {provider}",
-        "description": "{hint}\n\n{key_status}. Leave the key empty to keep it. Stored keys are never shown. The selected service receives messages and task context. A connection test is available in the mindKeeper sidebar panel.",
+        "description": "{hint}\n\n{key_status}. Leave the token empty to keep it; enter it again when changing servers. The token is stored in the HA config entry and never returned to this form. Enter the base URL without /chat/completions or /responses. Advanced options may retain their defaults. Test the connection in the mindKeeper sidebar panel.",
         "data": {
           "model": "Model",
-          "api_key": "API key",
-          "clear_key": "Remove saved key",
+          "api_key": "API token",
+          "clear_key": "Remove saved token",
           "base_url": "API base URL",
-          "folder_id": "Yandex folder ID"
+          "api_format": "API format",
+          "response_format": "JSON format for Chat Completions",
+          "project_id": "Project ID (optional)",
+          "extra_body": "Additional request parameters (JSON)"
         }
       }
     },
@@ -118,11 +121,11 @@
       "invalid_day_time": "Укажите время в формате ЧЧ:ММ.",
       "ai_provider": "Choose an AI provider.",
       "ai_model": "Enter a model name.",
-      "ai_endpoint": "Check the API URL: no credentials or query parameters; cloud APIs require HTTPS.",
-      "ai_key": "Add an API key for this provider.",
-      "ai_folder": "Enter the Yandex folder ID.",
+      "ai_endpoint": "Check the API base URL: no credentials, query parameters or fragment.",
+      "ai_key": "Check the API token.",
       "ai_storage": "Could not save AI settings. Please try again.",
-      "ai_request": "Check the AI connection settings."
+      "ai_request": "Check the AI connection settings.",
+      "ai_key_destination": "Enter the token again for a different server, or remove the saved token."
     },
     "progress": {
       "starting_login": "Получаю код входа…",

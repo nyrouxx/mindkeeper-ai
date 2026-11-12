@@ -137,7 +137,7 @@ class SecretaryOptionsFlow(config_entries.OptionsFlow):
             except AIError as error:
                 errors["base"] = str(error)
                 values.update(
-                    {k: v for k, v in user_input.items() if k in ("model", "base_url", "folder_id")}
+                    {k: v for k, v in user_input.items() if k in values and k != "api_key"}
                 )
             else:
                 return self.async_create_entry(title="", data=dict(self.config_entry.options))
@@ -150,8 +150,26 @@ class SecretaryOptionsFlow(config_entries.OptionsFlow):
             fields[vol.Optional("clear_key", default=False)] = bool
         if spec.get("custom_url"):
             fields[vol.Required("base_url", default=values["base_url"])] = selector.TextSelector()
-        if spec.get("folder_required"):
-            fields[vol.Required("folder_id", default=values["folder_id"])] = selector.TextSelector()
+        if provider == "custom":
+            for key, choices in (
+                (
+                    "api_format",
+                    [("chat_completions", "Chat Completions"), ("responses", "Responses")],
+                ),
+                ("response_format", [("json_object", "JSON"), ("json_schema", "JSON Schema")]),
+            ):
+                fields[vol.Optional(key, default=values[key])] = selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[{"value": value, "label": label} for value, label in choices],
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                )
+            fields[vol.Optional("project_id", default=values["project_id"])] = (
+                selector.TextSelector()
+            )
+            fields[vol.Optional("extra_body", default=values["extra_body"])] = (
+                selector.ObjectSelector()
+            )
         return self.async_show_form(
             step_id="ai_settings",
             data_schema=vol.Schema(fields),
@@ -159,7 +177,7 @@ class SecretaryOptionsFlow(config_entries.OptionsFlow):
             description_placeholders={
                 "provider": spec["label"],
                 "hint": spec["hint"],
-                "key_status": "Ключ сохранён" if values["api_key"] else "Ключ не задан",
+                "key_status": "Токен сохранён" if values.get("api_key") else "Токен не задан",
             },
         )
 

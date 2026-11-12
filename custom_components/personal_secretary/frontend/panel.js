@@ -166,14 +166,34 @@ class PersonalSecretaryPanel extends HTMLElement {
     provider=provider || ai.provider;
     const spec=ai.providers.find(p=>p.value===provider);
     if(!spec)return;
-    const config=ai.configurations[provider];
-    this.open(`<h2>AI для mindKeeper</h2><label for="ai-provider">Кто будет разбирать планы</label><select id="ai-provider">${ai.providers.map(p=>`<option value="${esc(p.value)}" ${p.value===provider?'selected':''}>${esc(p.label)}</option>`).join('')}</select><p class="subtle">${esc(spec.hint)}</p><label for="ai-model">Модель${provider==='codex'?' · default — выбор Codex':''}</label><input id="ai-model" value="${esc(config.model)}" maxlength="300" autocomplete="off">${provider!=='codex'?`<label for="ai-key">API-ключ${spec.key_required?'':' · необязательно'}</label><input id="ai-key" type="password" name="mindkeeper-${esc(provider)}-key" autocomplete="new-password" placeholder="${config.key_configured?'Ключ сохранён · оставь пустым, чтобы сохранить':'Вставь ключ из кабинета провайдера'}"><p class="subtle">Сохранённый ключ не показывается. Ключи разных сервисов хранятся отдельно.</p>${config.key_configured?'<label class="checklabel"><input id="ai-clear-key" type="checkbox">Удалить сохранённый ключ</label>':''}`:'<p class="subtle">Вход в ChatGPT: <a href="/config/integrations/integration/personal_secretary">Устройства и службы → mindKeeper AI → Настроить → Войти в ChatGPT</a>. Для этого способа Codex должен быть установлен на сервере HA.</p>'}${spec.custom_url?`<label for="ai-base-url">Базовый адрес API</label><input id="ai-base-url" value="${esc(config.base_url)}" placeholder="http://адрес-сервера:11434/v1" autocomplete="off">`:''}${spec.folder_required?`<label for="ai-folder">ID каталога Яндекса</label><input id="ai-folder" value="${esc(config.folder_id)}" autocomplete="off">`:''}<p class="subtle">Выбранный сервис получает сообщения и контекст дел. Автоматического переключения на другой AI нет. Проверка отправляет только тестовую фразу, без твоих дел.</p>${spec.url?`<p><a href="${esc(spec.url)}" target="_blank" rel="noopener">Документация и условия сервиса</a></p>`:''}<div class="ai-result subtle" role="status"></div><div class="actions"><button class="pill" data-action="close">Закрыть</button><button class="pill" data-action="test-ai">Проверить подключение</button><button class="send" data-action="save-ai">Сохранить AI</button></div>`);
+    const config=ai.configurations[provider], manual=provider==='custom';
+    const options=(choices,current)=>choices.map(([value,label])=>`<option value="${esc(value)}" ${value===current?'selected':''}>${esc(label)}</option>`).join('');
+    const connection=manual?`
+      <label for="ai-base-url">Базовый адрес API</label><input id="ai-base-url" value="${esc(config.base_url)}" placeholder="https://api.example.com/v1" autocomplete="off">
+      <p class="subtle">Без /chat/completions или /responses в конце. Для облачного сервиса используй HTTPS.</p>
+      <label for="ai-key">API-токен · необязательно для локального сервера</label><input id="ai-key" type="password" name="mindkeeper-api-token" autocomplete="new-password" placeholder="${config.key_configured?'Токен сохранён · оставь пустым, чтобы сохранить':'Вставь токен сервиса'}">
+      <p class="subtle">Токен хранится в записи интеграции Home Assistant и не возвращается в браузер. При смене сервера введи токен заново.</p>
+      ${config.key_configured?'<label class="checklabel"><input id="ai-clear-key" type="checkbox">Удалить сохранённый токен</label>':''}
+      <details><summary>Дополнительные параметры API</summary>
+        <label for="ai-api-format">Формат API</label><select id="ai-api-format">${options([['chat_completions','Chat Completions'],['responses','Responses']],config.api_format)}</select>
+        <label for="ai-response-format">Формат JSON для Chat Completions</label><select id="ai-response-format">${options([['json_object','JSON'],['json_schema','JSON Schema']],config.response_format)}</select>
+        <label for="ai-project">ID проекта · необязательно</label><input id="ai-project" value="${esc(config.project_id || '')}" autocomplete="off">
+        <label for="ai-extra-body">Дополнительные параметры запроса · JSON</label><textarea id="ai-extra-body" rows="3">${esc(JSON.stringify(config.extra_body || {},null,2))}</textarea>
+        <p class="subtle">Например, параметры режима рассуждений. Адрес, модель и токен вводятся в своих полях.</p>
+      </details>`:
+      '<p class="subtle">Вход в ChatGPT: <a href="/config/integrations/integration/personal_secretary">Устройства и службы → mindKeeper AI → Настроить → Войти в ChatGPT</a>. Для этого способа Codex должен быть установлен на сервере HA.</p>';
+    this.open(`<h2>AI для mindKeeper</h2><label for="ai-provider">Кто будет разбирать планы</label><select id="ai-provider">${ai.providers.map(p=>`<option value="${esc(p.value)}" ${p.value===provider?'selected':''}>${esc(p.label)}</option>`).join('')}</select><p class="subtle">${esc(spec.hint)}</p><label for="ai-model">Модель${manual?'':' · default — выбор Codex'}</label><input id="ai-model" value="${esc(config.model)}" maxlength="300" autocomplete="off">${connection}<p class="subtle">Выбранный сервис получает сообщения и контекст дел. Проверка отправляет только тестовую фразу, без твоих дел.</p><div class="ai-result subtle" role="status"></div><div class="actions"><button class="pill" data-action="close">Закрыть</button><button class="pill" data-action="test-ai">Проверить подключение</button><button class="send" data-action="save-ai">Сохранить AI</button></div>`);
   }
   aiSelection(){
     const dialog=this.shadowRoot.querySelector('dialog');
     const get=id=>dialog.querySelector('#'+id);
     const value={provider:get('ai-provider').value,model:get('ai-model').value};
-    for(const [field,id] of [['api_key','ai-key'],['base_url','ai-base-url'],['folder_id','ai-folder']])if(get(id))value[field]=get(id).value;
+    for(const [field,id] of [['api_key','ai-key'],['base_url','ai-base-url'],['api_format','ai-api-format'],['response_format','ai-response-format'],['project_id','ai-project']])if(get(id))value[field]=get(id).value;
+    if(get('ai-extra-body')){
+      try{value.extra_body=JSON.parse(get('ai-extra-body').value || '{}');}
+      catch{throw new Error('Проверь JSON дополнительных параметров API');}
+      if(!value.extra_body || Array.isArray(value.extra_body) || typeof value.extra_body!=='object')throw new Error('Дополнительные параметры API должны быть JSON-объектом');
+    }
     if(get('ai-clear-key'))value.clear_key=get('ai-clear-key').checked;
     return value;
   }

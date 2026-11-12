@@ -31,6 +31,9 @@ class Store:
     async def async_save(self, value):
         self.database[self.key] = deepcopy(value)
 
+    async def async_remove(self):
+        self.database.pop(self.key, None)
+
 
 def install_ha_fakes():
     for name in (
@@ -67,6 +70,7 @@ class Services:
 
 class Hass:
     def __init__(self):
+        self.data = {}
         self.config = SimpleNamespace(
             path=lambda *parts: str(ROOT.joinpath(*parts)), time_zone="Europe/Moscow"
         )

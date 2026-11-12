@@ -265,7 +265,10 @@ AI_SELECTION = {
     vol.Optional("api_key"): str,
     vol.Optional("clear_key"): bool,
     vol.Optional("base_url"): str,
-    vol.Optional("folder_id"): str,
+    vol.Optional("api_format"): str,
+    vol.Optional("response_format"): str,
+    vol.Optional("project_id"): str,
+    vol.Optional("extra_body"): dict,
 }
 
 

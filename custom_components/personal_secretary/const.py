@@ -2,7 +2,7 @@
 
 DOMAIN = "personal_secretary"
 NAME = "mindKeeper AI"
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 DEFAULTS = {
     "enabled": True,
     "model": "default",

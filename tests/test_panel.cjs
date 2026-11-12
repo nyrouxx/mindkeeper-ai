@@ -105,55 +105,69 @@ test('moving completed task from editor reopens it atomically with new date',asy
 
 const aiData=()=>({provider:'codex',providers:[
   {value:'codex',label:'Codex · ChatGPT',hint:'Существующий вход'},
-  {value:'gemini',label:'Gemini',hint:'Бесплатная квота API',key_required:true},
-  {value:'ollama',label:'Ollama',hint:'Локальная модель',custom_url:true},
-  {value:'yandex',label:'Яндекс',hint:'AI Studio',key_required:true,folder_required:true}
+  {value:'custom',label:'Ручная настройка API',hint:'Адрес, модель и токен',custom_url:true}
 ],configurations:{
-  codex:{model:'default',base_url:'',folder_id:'',key_configured:false},
-  gemini:{model:'gemini-2.5-flash-lite',base_url:'https://google.example/v1',folder_id:'',key_configured:true,api_key:'PRIVATE_KEY_MUST_NOT_RENDER'},
-  ollama:{model:'qwen3:8b',base_url:'http://local-server:11434/v1',folder_id:'',key_configured:false},
-  yandex:{model:'yandexgpt/rc',base_url:'https://yandex.example/v1',folder_id:'folder-123',key_configured:false}
+  codex:{model:'default',key_configured:false},
+  custom:{model:'manual-model',base_url:'https://api.example.test/v1',api_format:'chat_completions',response_format:'json_object',project_id:'',extra_body:{},key_configured:true,api_key:'PRIVATE_KEY_MUST_NOT_RENDER'}
 }});
 
-test('AI settings list providers and keep saved credentials out of HTML',()=>{
+test('AI settings offer Codex and manual API, keeping the saved token out of HTML',()=>{
   const panel=new Panel();panel.data=data();panel.data.ai=aiData();
   panel.settings();assert(dialog.innerHTML.includes('Настроить AI'));
-  panel.aiSettings('gemini');
+  panel.aiSettings('custom');
   assert(dialog.innerHTML.includes('type="password"'));
-  assert(dialog.innerHTML.includes('Ключ сохранён'));
+  assert(dialog.innerHTML.includes('Токен сохранён'));
   assert(dialog.innerHTML.includes('Проверить подключение'));
   assert(!dialog.innerHTML.includes('PRIVATE_KEY'));
-  assert(!dialog.innerHTML.includes('id="ai-base-url"'));
+  assert(dialog.innerHTML.includes('id="ai-base-url"'));
+  assert(dialog.innerHTML.includes('https://api.example.test/v1'));
+  assert(dialog.innerHTML.includes('<details>'));
+  assert(!dialog.innerHTML.includes('Gemini'));
+  assert(!dialog.innerHTML.includes('id="ai-folder"'));
   panel.aiSettings('codex');assert(!dialog.innerHTML.includes('id="ai-key"'));
-  panel.aiSettings('ollama');assert(dialog.innerHTML.includes('http://local-server:11434/v1'));assert(!dialog.innerHTML.includes('gemini-2.5'));
-  panel.aiSettings('yandex');assert(dialog.innerHTML.includes('id="ai-folder"'));assert(dialog.innerHTML.includes('folder-123'));
+  assert(!dialog.innerHTML.includes('id="ai-base-url"'));
 });
 
-test('AI provider labels, models and endpoint values are escaped',()=>{
+test('AI models, endpoints and advanced JSON values are escaped',()=>{
   const panel=new Panel();panel.data=data();panel.data.ai=aiData();
-  panel.data.ai.configurations.ollama.model='"><img src=x onerror=alert(1)>';
-  panel.aiSettings('ollama');assert(dialog.innerHTML.includes('&lt;img'));assert(!dialog.innerHTML.includes('<img'));
+  panel.data.ai.configurations.custom.model='"><img src=x onerror=alert(1)>';
+  panel.data.ai.configurations.custom.extra_body={note:'</textarea><script>alert(1)</script>'};
+  panel.aiSettings('custom');assert(dialog.innerHTML.includes('&lt;img'));assert(!dialog.innerHTML.includes('<img'));
+  assert(dialog.innerHTML.includes('&lt;/textarea&gt;'));assert(!dialog.innerHTML.includes('<script>'));
 });
 
-test('AI test submits only selected connection fields and leaves active provider unchanged',async()=>{
+test('AI test submits manual connection fields without activating them or sending tasks',async()=>{
   const panel=new Panel();panel.data=data();panel.data.ai=aiData();
-  const fields={'#ai-provider':{value:'gemini'},'#ai-model':{value:'gemini-2.5-flash-lite'},'#ai-key':{value:'PRIVATE_TYPED_KEY'},'.ai-result':{textContent:''}};
+  const fields={'#ai-provider':{value:'custom'},'#ai-model':{value:'manual-model'},'#ai-key':{value:'PRIVATE_TYPED_KEY'},'#ai-base-url':{value:'https://api.example.test/v1'},'#ai-api-format':{value:'chat_completions'},'#ai-response-format':{value:'json_schema'},'#ai-project':{value:''},'#ai-extra-body':{value:'{"enable_thinking":false}'},'.ai-result':{textContent:''}};
   const before=dialog.querySelector;dialog.querySelector=selector=>fields[selector] || null;
   let called;
   panel.call=async(type,payload)=>{called={type,payload};return {message:'Подключение работает'};};
   try{
     await panel.testAI();assert.equal(called.type,'ai_test');assert.equal(called.payload.api_key,'PRIVATE_TYPED_KEY');
+    assert.equal(called.payload.base_url,'https://api.example.test/v1');assert.equal(called.payload.response_format,'json_schema');
+    assert.equal(called.payload.extra_body.enable_thinking,false);
     assert(!Object.hasOwn(called.payload,'tasks'));assert.equal(panel.data.ai.provider,'codex');assert.equal(fields['.ai-result'].textContent,'Подключение работает');
   }finally{dialog.querySelector=before;}
 });
 
-test('AI save clears the typed key from the rebuilt form and accepts only the public snapshot',async()=>{
+test('Invalid advanced JSON is rejected locally without echoing input or saving settings',async()=>{
   const panel=new Panel();panel.data=data();panel.data.ai=aiData();
-  const fields={'#ai-provider':{value:'gemini'},'#ai-model':{value:'gemini-2.5-flash-lite'},'#ai-key':{value:'PRIVATE_TYPED_KEY'},'.ai-result':{textContent:''}};
+  const fields={'#ai-provider':{value:'custom'},'#ai-model':{value:'test'},'#ai-extra-body':{value:'PRIVATE_INVALID_JSON'},'.ai-result':{textContent:''}};
   const before=dialog.querySelector;dialog.querySelector=selector=>fields[selector] || null;
-  panel.call=async()=>{const result=aiData();result.provider='gemini';delete result.configurations.gemini.api_key;return result;};
+  let calls=0;panel.call=async()=>{calls++;};
   try{
-    await panel.saveAI();assert.equal(panel.data.ai.provider,'gemini');
+    await panel.saveAI();assert.equal(calls,0);assert(!fields['.ai-result'].textContent.includes('PRIVATE'));
+    fields['#ai-extra-body'].value='[]';await panel.saveAI();assert.equal(calls,0);
+  }finally{dialog.querySelector=before;}
+});
+
+test('AI save clears the typed token from the rebuilt form and accepts the public snapshot',async()=>{
+  const panel=new Panel();panel.data=data();panel.data.ai=aiData();
+  const fields={'#ai-provider':{value:'custom'},'#ai-model':{value:'manual-model'},'#ai-key':{value:'PRIVATE_TYPED_KEY'},'.ai-result':{textContent:''}};
+  const before=dialog.querySelector;dialog.querySelector=selector=>fields[selector] || null;
+  panel.call=async()=>{const result=aiData();result.provider='custom';delete result.configurations.custom.api_key;return result;};
+  try{
+    await panel.saveAI();assert.equal(panel.data.ai.provider,'custom');
     assert(!dialog.innerHTML.includes('PRIVATE_TYPED_KEY'));assert(!JSON.stringify(panel.data.ai).includes('PRIVATE_TYPED_KEY'));
   }finally{dialog.querySelector=before;}
 });

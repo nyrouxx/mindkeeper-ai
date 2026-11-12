@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-import re
+from copy import deepcopy
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
@@ -17,75 +17,63 @@ PROVIDERS = {
         "label": "Codex · вход через ChatGPT",
         "model": "default",
         "base_url": "",
-        "hint": "Текущий способ: вход в ChatGPT через Codex. Отдельный API-ключ не нужен; действуют лимиты аккаунта.",
+        "hint": "Вход в ChatGPT через Codex. Отдельный API-токен не нужен; действуют лимиты аккаунта.",
         "url": "https://developers.openai.com/codex/auth",
     },
-    "gemini": {
-        "label": "Google Gemini",
-        "model": "gemini-2.5-flash-lite",
-        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "key_required": True,
-        "hint": "У некоторых моделей есть бесплатная квота API. Лимиты и доступность зависят от региона и аккаунта; проверь тариф в Google AI Studio.",
-        "url": "https://aistudio.google.com/docs/pricing",
-    },
-    "deepseek": {
-        "label": "DeepSeek API",
-        "model": "deepseek-flash",
-        "base_url": "https://api.deepseek.com/v1",
-        "key_required": True,
-        "hint": "Облачный API оплачивается отдельно от бесплатного чата DeepSeek на сайте.",
-        "url": "https://api-docs.deepseek.com/quick_start/pricing/",
-    },
-    "qwen": {
-        "label": "Qwen · Alibaba Cloud",
-        "model": "qwen-plus",
-        "base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-        "key_required": True,
-        "custom_url": True,
-        "hint": "Для новых аккаунтов возможна пробная квота на 90 дней. Включи Free Quota Only в кабинете Alibaba, если нужен только бесплатный доступ. Адрес API и ключ должны относиться к одному региону/workspace.",
-        "url": "https://www.alibabacloud.com/help/en/model-studio/new-free-quota",
-    },
-    "yandex": {
-        "label": "Яндекс · AI Studio",
-        "model": "yandexgpt/rc",
-        "base_url": "https://ai.api.cloud.yandex.net/v1",
-        "key_required": True,
-        "folder_required": True,
-        "hint": "Нужны API-ключ AI Studio и ID каталога. Это облачный API с отдельным тарифом, а не вход в приложение Алисы.",
-        "url": "https://aistudio.yandex.ru/en/docs/ai-studio/operations/generation/completions-structured",
-    },
-    "openai": {
-        "label": "ChatGPT · OpenAI API",
-        "model": "gpt-6-luna",
-        "base_url": "https://api.openai.com/v1",
-        "key_required": True,
-        "hint": "Нужен ключ OpenAI API. Расходы и доступные кредиты проверяются в API-кабинете. Для существующего входа через ChatGPT выбирай Codex.",
-        "url": "https://platform.openai.com/api-keys",
-    },
-    "ollama": {
-        "label": "Ollama · локальные модели",
-        "model": "qwen3:8b",
-        "base_url": "http://localhost:11434/v1",
-        "custom_url": True,
-        "hint": "Облачной платы за локальную модель нет. Нужен уже запущенный Ollama на твоём компьютере/сервере и загруженная модель. Укажи адрес, доступный из HA; localhost означает сам сервер HA.",
-        "url": "https://docs.ollama.com/api/openai-compatibility",
-    },
     "custom": {
-        "label": "Другой OpenAI-совместимый API",
+        "label": "Ручная настройка API",
         "model": "",
         "base_url": "",
         "custom_url": True,
-        "hint": "Для LM Studio, собственного сервера или другого совместимого сервиса. Нужен Chat Completions API с поддержкой JSON. Тариф зависит от сервиса.",
+        "hint": "Укажи базовый адрес API, модель и токен сервиса. Нужен совместимый API с JSON-ответами. Для локального сервера токен может не требоваться.",
         "url": "",
     },
+}
+
+AI_DATA = "ai_configurations"
+CUSTOM_DEFAULTS = {
+    "model": "",
+    "base_url": "",
+    "api_key": "",
+    "api_format": "chat_completions",
+    "response_format": "json_object",
+    "project_id": "",
+    "extra_body": {},
+}
+# Version 0.7.0 presets are read only during migration, never offered in the UI.
+LEGACY_DEFAULTS = {
+    "gemini": ("gemini-2.5-flash-lite", "https://generativelanguage.googleapis.com/v1beta/openai"),
+    "deepseek": ("deepseek-flash", "https://api.deepseek.com/v1"),
+    "qwen": ("qwen-plus", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"),
+    "yandex": ("yandexgpt/rc", "https://ai.api.cloud.yandex.net/v1"),
+    "openai": ("gpt-6-luna", "https://api.openai.com/v1"),
+    "ollama": ("qwen3:8b", "http://localhost:11434/v1"),
+}
+RESERVED_BODY = {
+    "model",
+    "messages",
+    "instructions",
+    "input",
+    "prompt",
+    "stream",
+    "tools",
+    "tool_choice",
+    "functions",
+    "function_call",
+    "response_format",
+    "text",
+    "store",
+    "previous_response_id",
+    "conversation",
+    "background",
 }
 
 ERRORS = {
     "ai_provider": "Выбери доступного AI-провайдера.",
     "ai_model": "Укажи название модели из кабинета провайдера.",
-    "ai_endpoint": "Укажи адрес API без логина, пароля, query-параметров и фрагмента. Для облачных API нужен HTTPS.",
+    "ai_endpoint": "Укажи базовый адрес API без логина, пароля, query-параметров и фрагмента.",
     "ai_key": "Добавь API-ключ выбранного провайдера.",
-    "ai_folder": "Укажи ID каталога Яндекса.",
+    "ai_key_destination": "Для другого сервера введи токен заново или удали сохранённый токен.",
     "ai_auth": "API отклонил ключ или не разрешает доступ к модели. Проверь ключ, права и доступность сервиса в твоём регионе.",
     "ai_quota": "Лимит запросов или квота API исчерпаны. Проверь лимиты и тариф в кабинете провайдера.",
     "ai_request": "API отклонил запрос. Проверь модель, адрес сервера и поддержку JSON-ответов.",
@@ -118,10 +106,45 @@ def checked_plan(value):
     return value
 
 
+def migrate_configurations(stored, provider):
+    """Retain Codex and one manual connection, preserving the active old preset."""
+    result = {}
+    if "codex" in stored:
+        result["codex"] = {"model": stored["codex"].get("model", "default")}
+    source = dict(stored.get("custom", {}))
+    if provider in LEGACY_DEFAULTS:
+        model, url = LEGACY_DEFAULTS[provider]
+        source = {"model": model, "base_url": url, **stored.get(provider, {})}
+        if provider == "openai":
+            source["api_format"] = "responses"
+        if provider in ("gemini", "yandex", "ollama"):
+            source["response_format"] = "json_schema"
+        if provider == "yandex":
+            source["project_id"] = source.get("folder_id", "")
+            if not source["model"].startswith("gpt://"):
+                source["model"] = f"gpt://{source['project_id']}/{source['model']}"
+        if provider == "deepseek":
+            source["extra_body"] = {"thinking": {"type": "disabled"}}
+        if provider == "qwen":
+            source["extra_body"] = {"enable_thinking": False}
+        provider = "custom"
+    if source:
+        result["custom"] = {
+            **CUSTOM_DEFAULTS,
+            **{k: v for k, v in source.items() if k in CUSTOM_DEFAULTS},
+        }
+    return result, provider
+
+
+def origin(url):
+    parsed = urlsplit(url)
+    return parsed.scheme, parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80)
+
+
 class AISettings:
     def __init__(self, hass, entry):
         self.hass, self.entry = hass, entry
-        self.store = Store(
+        self.legacy_store = Store(
             hass, 1, f"{DOMAIN}.{entry.entry_id}.ai", private=True, atomic_writes=True
         )
         self.configurations = {}
@@ -133,35 +156,59 @@ class AISettings:
         return self.entry.options.get("ai_provider", "codex")
 
     async def load(self):
-        stored = await self.store.async_load() or {}
-        self.configurations = stored.get("providers", {})
+        migrated_this_boot = self.hass.data.setdefault(DOMAIN + "_ai_migrations", set())
+        if AI_DATA in self.entry.data:
+            self.configurations = deepcopy(self.entry.data[AI_DATA])
+            # Config entries save asynchronously. Keep the old file during the
+            # migration boot; delete only after a subsequent Core start has
+            # loaded the migrated entry from disk. Reloads in that boot are safe.
+            if self.entry.entry_id not in migrated_this_boot:
+                await self.legacy_store.async_remove()
+            return
+        stored = await self.legacy_store.async_load()
+        if stored or self.provider in LEGACY_DEFAULTS:
+            profiles, provider = migrate_configurations(
+                (stored or {}).get("providers", {}), self.provider
+            )
+            self._commit(profiles, provider)
+            migrated_this_boot.add(self.entry.entry_id)
 
     def configuration(self, provider=None):
         provider = self.provider if provider is None else provider
         if not isinstance(provider, str) or provider not in PROVIDERS:
             raise AIError("ai_provider")
-        spec = PROVIDERS[provider]
-        result = {k: spec[k] for k in ("model", "base_url")}
-        result.update(api_key="", folder_id="")
-        if provider == "codex":
-            result["model"] = self.entry.options.get("model", "default")
-        return {
-            **result,
-            **{k: v for k, v in self.configurations.get(provider, {}).items() if k in result},
-        }
+        defaults = (
+            {"model": self.entry.options.get("model", "default")}
+            if provider == "codex"
+            else CUSTOM_DEFAULTS
+        )
+        return deepcopy(
+            {
+                **defaults,
+                **{k: v for k, v in self.configurations.get(provider, {}).items() if k in defaults},
+            }
+        )
 
-    def validate(self, selection, *, allow_clear=False):
+    def validate(self, selection):
         provider = selection.get("provider")
         if not isinstance(provider, str) or provider not in PROVIDERS:
             raise AIError("ai_provider")
-        spec = PROVIDERS[provider]
         result = self.configuration(provider)
-        for key in ("model", "base_url", "folder_id"):
-            if key in selection:
+        previous_url = result.get("base_url", "")
+        for key in ("model", "base_url", "api_format", "response_format", "project_id"):
+            if key in selection and key in result:
                 value = selection[key]
                 if not isinstance(value, str):
                     raise AIError("ai_request")
                 result[key] = value.strip()
+        if (
+            not result["model"]
+            or len(result["model"]) > 300
+            or any(c.isspace() for c in result["model"])
+        ):
+            raise AIError("ai_model")
+        if provider == "codex":
+            return provider, result
         key = selection.get("api_key", "")
         if not isinstance(key, str) or len(key) > 4096 or any(c in key for c in "\r\n"):
             raise AIError("ai_key")
@@ -169,59 +216,67 @@ class AISettings:
             result["api_key"] = ""
         if key.strip():
             result["api_key"] = key.strip()
+        result["base_url"] = result["base_url"].rstrip("/")
+        try:
+            parsed = urlsplit(result["base_url"])
+            valid = (
+                parsed.scheme in ("http", "https")
+                and parsed.hostname
+                and parsed.port != 0
+                and not parsed.username
+                and not parsed.password
+                and not parsed.query
+                and not parsed.fragment
+                and not any(c.isspace() for c in result["base_url"])
+                and len(result["base_url"]) <= 2048
+            )
+        except ValueError:
+            valid = False
+        if not valid:
+            raise AIError("ai_endpoint")
         if (
-            not result["model"]
-            or len(result["model"]) > 300
-            or any(c.isspace() for c in result["model"])
+            result["api_key"]
+            and not key.strip()
+            and previous_url
+            and origin(previous_url) != origin(result["base_url"])
         ):
-            raise AIError("ai_model")
-        if (
-            spec.get("key_required")
-            and not result["api_key"]
-            and not (allow_clear and selection.get("clear_key"))
-        ):
-            raise AIError("ai_key")
-        if spec.get("folder_required") and not re.fullmatch(
-            r"[A-Za-z0-9_-]{3,100}", result["folder_id"]
-        ):
-            raise AIError("ai_folder")
-        if provider != "codex":
-            # Preset keys cannot accidentally travel to a different provider.
-            if not spec.get("custom_url"):
-                result["base_url"] = spec["base_url"]
-            result["base_url"] = result["base_url"].rstrip("/")
-            try:
-                parsed = urlsplit(result["base_url"])
-                valid = (
-                    parsed.scheme in ("http", "https")
-                    and parsed.hostname
-                    and parsed.port != 0
-                    and not parsed.username
-                    and not parsed.password
-                    and not parsed.query
-                    and not parsed.fragment
-                    and not any(c.isspace() for c in result["base_url"])
-                    and len(result["base_url"]) <= 2048
-                )
-            except ValueError:
-                valid = False
-            if not valid or (provider not in ("ollama", "custom") and parsed.scheme != "https"):
-                raise AIError("ai_endpoint")
+            raise AIError("ai_key_destination")
+        if result["api_format"] not in ("chat_completions", "responses") or result[
+            "response_format"
+        ] not in ("json_object", "json_schema"):
+            raise AIError("ai_request")
+        if len(result["project_id"]) > 100 or any(c.isspace() for c in result["project_id"]):
+            raise AIError("ai_request")
+        if "extra_body" in selection:
+            result["extra_body"] = deepcopy(selection["extra_body"])
+        try:
+            valid = (
+                isinstance(result["extra_body"], dict)
+                and not RESERVED_BODY.intersection(result["extra_body"])
+                and len(json.dumps(result["extra_body"], allow_nan=False)) <= 8192
+            )
+        except (ValueError, TypeError):
+            valid = False
+        if not valid:
+            raise AIError("ai_request")
         return provider, result
+
+    def _commit(self, profiles, provider):
+        try:
+            self.hass.config_entries.async_update_entry(
+                self.entry,
+                data={**self.entry.data, AI_DATA: deepcopy(profiles)},
+                options={**self.entry.options, "ai_provider": provider},
+            )
+        except Exception:
+            raise AIError("ai_storage") from None
+        self.configurations = profiles
+        self.generation += 1
 
     async def configure(self, selection):
         async with self._lock:
-            provider, configuration = self.validate(selection, allow_clear=True)
-            updated = {**self.configurations, provider: configuration}
-            try:
-                await self.store.async_save({"providers": updated})
-            except Exception:
-                raise AIError("ai_storage") from None
-            self.configurations = updated
-            self.generation += 1
-            self.hass.config_entries.async_update_entry(
-                self.entry, options={**self.entry.options, "ai_provider": provider}
-            )
+            provider, configuration = self.validate(selection)
+            self._commit({**self.configurations, provider: configuration}, provider)
 
     def public(self):
         return {
@@ -230,7 +285,7 @@ class AISettings:
             "configurations": {
                 key: {
                     **{k: v for k, v in self.configuration(key).items() if k != "api_key"},
-                    "key_configured": bool(self.configuration(key)["api_key"]),
+                    "key_configured": bool(self.configuration(key).get("api_key")),
                 }
                 for key in PROVIDERS
             },
@@ -264,7 +319,7 @@ class HttpParser:
         if config["api_key"]:
             headers["Authorization"] = "Bearer " + config["api_key"]
         structured = {"name": "mindkeeper_plan", "schema": schema, "strict": True}
-        if provider == "openai":
+        if config["api_format"] == "responses":
             route = "/responses"
             body = {
                 "model": config["model"],
@@ -277,13 +332,6 @@ class HttpParser:
         else:
             route = "/chat/completions"
             model = config["model"]
-            if provider == "yandex":
-                model = (
-                    f"gpt://{config['folder_id']}/{model}"
-                    if not model.startswith("gpt://")
-                    else model
-                )
-                headers["OpenAI-Project"] = config["folder_id"]
             body = {
                 "model": model,
                 "messages": [
@@ -294,12 +342,11 @@ class HttpParser:
                 "max_tokens": 8192,
                 "response_format": {"type": "json_object"},
             }
-            if provider in ("gemini", "yandex", "ollama"):
+            if config["response_format"] == "json_schema":
                 body["response_format"] = {"type": "json_schema", "json_schema": structured}
-            if provider == "deepseek":
-                body["thinking"] = {"type": "disabled"}
-            if provider == "qwen":
-                body["enable_thinking"] = False
+        if config["project_id"]:
+            headers["OpenAI-Project"] = config["project_id"]
+        body.update(config["extra_body"])
         try:
             async with self.session_factory().post(
                 config["base_url"] + route,
@@ -322,7 +369,7 @@ class HttpParser:
                     if len(raw) > 262144:
                         raise AIError("invalid_response")
                 result = json.loads(raw)
-                if provider == "openai":
+                if config["api_format"] == "responses":
                     if result.get("status") != "completed":
                         raise AIError("invalid_response")
                     text = "".join(
